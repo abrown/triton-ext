@@ -1,0 +1,129 @@
+name: Build Triton
+
+on:
+  push:
+    paths:
+      - '.github/workflows/**'
+  schedule:
+    # Run nightly (after LLVM build workflow at midnight)
+    - cron: '30 0 * * *'
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["Build LLVM"]
+    types: [completed]
+
+jobs:
+  fetch-triton-info:
+    name: Fetch Triton Commit Hash
+    runs-on: ubuntu-latest
+    outputs:
+      triton-hash: ${{ steps.fetch-hash.outputs.hash }}
+      triton-cache-key: ${{ steps.fetch-hash.outputs.cache-key }}
+      llvm-hash: ${{ steps.fetch-hash.outputs.llvm-hash }}
+      llvm-cache-key: ${{ steps.fetch-hash.outputs.llvm-cache-key }}
+    steps:
+      - name: Fetch Triton and LLVM commit hashes
+        id: fetch-hash
+        run: |
+          # Get the latest Triton commit from main
+          TRITON_HASH=$(curl -s https://api.github.com/repos/triton-lang/triton/commits/main | jq -r '.sha' | cut -c1-7)
+
+          # Get the LLVM hash from Triton's main branch
+          LLVM_HASH=$(curl -s https://raw.githubusercontent.com/triton-lang/triton/main/cmake/llvm-hash.txt | tr -d '[:space:]')
+
+          echo "triton-hash=$TRITON_HASH" >> $GITHUB_OUTPUT
+          echo "triton-cache-key=triton-$TRITON_HASH" >> $GITHUB_OUTPUT
+          echo "llvm-hash=$LLVM_HASH" >> $GITHUB_OUTPUT
+          echo "llvm-cache-key=llvm-$LLVM_HASH" >> $GITHUB_OUTPUT
+
+          echo "Triton hash: $TRITON_HASH"
+          echo "LLVM hash: $LLVM_HASH"
+
+  build-triton:
+    name: Build Triton
+    needs: fetch-triton-info
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      TRITON_HASH: ${{ needs.fetch-triton-info.outputs.triton-hash }}
+      TRITON_CACHE_KEY: ${{ needs.fetch-triton-info.outputs.triton-cache-key }}
+      LLVM_HASH: ${{ needs.fetch-triton-info.outputs.llvm-hash }}
+      LLVM_CACHE_KEY: ${{ needs.fetch-triton-info.outputs.llvm-cache-key }}
+      LLVM_BUILD_PATH: ${{ github.workspace }}/llvm-artifacts
+    steps:
+      - name: Check Triton cache
+        id: triton-cache-check
+        uses: actions/cache@v4
+        with:
+          path: triton-build
+          key: ${{ env.TRITON_CACHE_KEY }}
+          lookup-only: true
+
+      - name: Skip if Triton cached
+        if: steps.triton-cache-check.outputs.cache-hit == 'true'
+        run: echo "Triton artifacts already cached, skipping build"
+
+      - name: Restore LLVM artifacts
+        if: steps.triton-cache-check.outputs.cache-hit != 'true'
+        uses: actions/cache@v4
+        with:
+          path: llvm-artifacts
+          key: ${{ env.LLVM_CACHE_KEY }}
+          fail-on-cache-miss: true
+
+      - name: Checkout Triton
+        if: steps.triton-cache-check.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: triton-lang/triton
+          ref: main
+
+      - name: Install dependencies
+        if: steps.triton-cache-check.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            python3 \
+            python3-pip \
+            python3-dev \
+            git \
+            clang \
+            lld
+
+      - name: Install Python dependencies
+        if: steps.triton-cache-check.outputs.cache-hit != 'true'
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r python/requirements.txt
+
+      - name: Build Triton with cached LLVM
+        if: steps.triton-cache-check.outputs.cache-hit != 'true'
+        run: |
+          export LLVM_BUILD_PATH=${{ env.LLVM_BUILD_PATH }}
+          export TRITON_BUILD_WITH_CLANG_LLD=1
+          export TRITON_BUILD_WITH_CCACHE=0
+          export LLVM_INCLUDE_DIRS=${{ env.LLVM_BUILD_PATH }}/include
+          export LLVM_LIBRARY_DIR=${{ env.LLVM_BUILD_PATH }}/lib
+          export LLVM_SYSPATH=${{ env.LLVM_BUILD_PATH }}
+
+          mkdir -p triton-build
+          export CMAKE_PREFIX_PATH="${{ env.LLVM_BUILD_PATH }}:$CMAKE_PREFIX_PATH"
+
+          python3 -m pip install -e python --no-build-isolation -v
+        env:
+          LLVM_BUILD_PATH: ${{ env.LLVM_BUILD_PATH }}
+
+      - name: Save build artifacts to cache
+        if: steps.triton-cache-check.outputs.cache-hit != 'true'
+        uses: actions/cache@v4
+        with:
+          path: triton-build
+          key: ${{ env.TRITON_CACHE_KEY }}
+
+      - name: Verify Triton build
+        if: steps.triton-cache-check.outputs.cache-hit != 'true'
+        run: |
+          python3 -c "import triton; print('Triton imported successfully')"

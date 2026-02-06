@@ -1,0 +1,116 @@
+name: Build LLVM
+
+on:
+  push:
+    paths:
+      - '.github/workflows/**'
+  schedule:
+    # Run daily to check for upstream changes
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  fetch-llvm-hash:
+    name: Fetch LLVM Hash from Upstream Triton
+    runs-on: ubuntu-latest
+    outputs:
+      llvm-hash: ${{ steps.fetch-hash.outputs.hash }}
+      cache-key: ${{ steps.fetch-hash.outputs.cache-key }}
+    steps:
+      - name: Fetch LLVM commit hash from Triton
+        id: fetch-hash
+        run: |
+          HASH=$(curl -s https://raw.githubusercontent.com/triton-lang/triton/main/cmake/llvm-hash.txt | tr -d '[:space:]')
+          echo "hash=$HASH" >> $GITHUB_OUTPUT
+          echo "cache-key=llvm-$HASH" >> $GITHUB_OUTPUT
+          echo "LLVM hash: $HASH"
+
+  build-llvm:
+    name: Build LLVM
+    needs: fetch-llvm-hash
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      LLVM_HASH: ${{ needs.fetch-llvm-hash.outputs.llvm-hash }}
+      CACHE_KEY: ${{ needs.fetch-llvm-hash.outputs.cache-key }}
+    steps:
+      - name: Check cache
+        id: cache-check
+        uses: actions/cache@v4
+        with:
+          path: build-llvm
+          key: ${{ env.CACHE_KEY }}
+          lookup-only: true
+
+      - name: Skip if cached
+        if: steps.cache-check.outputs.cache-hit == 'true'
+        run: echo "LLVM artifacts already cached, skipping build"
+
+      - name: Checkout triton-ext
+        if: steps.cache-check.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: triton-lang/triton-ext
+
+      - name: Install dependencies
+        if: steps.cache-check.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            git \
+            clang \
+            lld
+
+      - name: Clone and build LLVM
+        if: steps.cache-check.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p llvm-project
+          cd llvm-project
+
+          echo "Cloning LLVM project..."
+          git clone https://github.com/llvm/llvm-project .
+
+          echo "Resetting to ${{ env.LLVM_HASH }}..."
+          git fetch origin ${{ env.LLVM_HASH }}
+          git reset --hard ${{ env.LLVM_HASH }}
+
+          echo "Building LLVM..."
+          mkdir -p build
+          cd build
+
+          cmake \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DBUILD_SHARED_LIBS=ON \
+            -DLLVM_ENABLE_PROJECTS="mlir;llvm;lld" \
+            -DLLVM_TARGETS_TO_BUILD="Native;NVPTX;AMDGPU" \
+            -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/build-llvm" \
+            -DLLVM_CCACHE_BUILD=OFF \
+            -DLLVM_ENABLE_ASSERTIONS=ON \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DLLVM_ENABLE_LLD=ON \
+            -DLLVM_OPTIMIZED_TABLEGEN=ON \
+            -DMLIR_ENABLE_BINDINGS_PYTHON=OFF \
+            -DLLVM_ENABLE_ZSTD=OFF \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=1 \
+            ../llvm
+
+          ninja install
+
+      - name: Cache LLVM artifacts
+        if: steps.cache-check.outputs.cache-hit != 'true'
+        uses: actions/cache@v4
+        with:
+          path: build-llvm
+          key: ${{ env.CACHE_KEY }}
+
+      - name: Verify LLVM build
+        if: steps.cache-check.outputs.cache-hit != 'true'
+        run: |
+          test -f build-llvm/lib/libLLVM.so || exit 1
+          test -f build-llvm/lib/libMLIR.so || exit 1
+          echo "LLVM build verified!"

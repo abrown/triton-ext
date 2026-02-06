@@ -1,0 +1,189 @@
+name: Build triton-ext
+
+on:
+  push:
+    paths:
+      - '.github/workflows/**'
+  schedule:
+    # Run after Triton build (at 2 AM UTC)
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["Build Triton"]
+    types: [completed]
+
+jobs:
+  fetch-build-hashes:
+    name: Fetch Build Hashes
+    runs-on: ubuntu-latest
+    outputs:
+      triton-hash: ${{ steps.fetch-hash.outputs.triton-hash }}
+      triton-cache-key: ${{ steps.fetch-hash.outputs.triton-cache-key }}
+      llvm-hash: ${{ steps.fetch-hash.outputs.llvm-hash }}
+      llvm-cache-key: ${{ steps.fetch-hash.outputs.llvm-cache-key }}
+    steps:
+      - name: Fetch Triton and LLVM commit hashes
+        id: fetch-hash
+        run: |
+          # Get the latest Triton commit from main
+          TRITON_HASH=$(curl -s https://api.github.com/repos/triton-lang/triton/commits/main | jq -r '.sha' | cut -c1-7)
+
+          # Get the LLVM hash from Triton's main branch
+          LLVM_HASH=$(curl -s https://raw.githubusercontent.com/triton-lang/triton/main/cmake/llvm-hash.txt | tr -d '[:space:]')
+
+          echo "triton-hash=$TRITON_HASH" >> $GITHUB_OUTPUT
+          echo "triton-cache-key=triton-$TRITON_HASH" >> $GITHUB_OUTPUT
+          echo "llvm-hash=$LLVM_HASH" >> $GITHUB_OUTPUT
+          echo "llvm-cache-key=llvm-$LLVM_HASH" >> $GITHUB_OUTPUT
+
+          echo "Triton hash: $TRITON_HASH"
+          echo "LLVM hash: $LLVM_HASH"
+
+  build-triton-ext:
+    name: Build triton-ext
+    needs: fetch-build-hashes
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      TRITON_CACHE_KEY: ${{ needs.fetch-build-hashes.outputs.triton-cache-key }}
+      LLVM_CACHE_KEY: ${{ needs.fetch-build-hashes.outputs.llvm-cache-key }}
+      LLVM_BUILD_PATH: ${{ github.workspace }}/llvm-artifacts
+      TRITON_BUILD_PATH: ${{ github.workspace }}/triton-build
+    outputs:
+      build-status: ${{ job.status }}
+      build-url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Checkout triton-ext
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            python3 \
+            python3-pip \
+            git
+
+      - name: Restore LLVM artifacts
+        id: llvm-cache
+        uses: actions/cache@v4
+        with:
+          path: llvm-artifacts
+          key: ${{ env.LLVM_CACHE_KEY }}
+          fail-on-cache-miss: false
+
+      - name: Restore Triton artifacts
+        id: triton-cache
+        uses: actions/cache@v4
+        with:
+          path: triton-build
+          key: ${{ env.TRITON_CACHE_KEY }}
+          fail-on-cache-miss: false
+
+      - name: Check cache availability
+        id: check-cache
+        run: |
+          if [ ! -d "${{ env.LLVM_BUILD_PATH }}" ]; then
+            echo "LLVM cache not found"
+            exit 1
+          fi
+          if [ ! -d "${{ env.TRITON_BUILD_PATH }}" ]; then
+            echo "Triton cache not found"
+            exit 1
+          fi
+          echo "caches-available=true" >> $GITHUB_OUTPUT
+
+      - name: Build triton-ext
+        if: steps.check-cache.outputs.caches-available == 'true'
+        run: |
+          mkdir -p build
+          cd build
+
+          cmake \
+            -G Ninja \
+            -DCMAKE_PREFIX_PATH="${{ env.LLVM_BUILD_PATH }}" \
+            -DLLVM_DIR="${{ env.LLVM_BUILD_PATH }}/lib/cmake/llvm" \
+            -DMLIR_DIR="${{ env.LLVM_BUILD_PATH }}/lib/cmake/mlir" \
+            ..
+
+          ninja
+        env:
+          LLVM_BUILD_PATH: ${{ env.LLVM_BUILD_PATH }}
+
+      - name: Run tests
+        if: steps.check-cache.outputs.caches-available == 'true'
+        run: |
+          # TODO: Add actual tests once available
+          echo "Tests placeholder - add test commands here"
+
+      - name: Create failure PR
+        if: failure() && steps.check-cache.outputs.caches-available == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const buildUrl = '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}';
+
+            const prTitle = 'Fix build failure in triton-ext';
+            const prBody = `A recent build of this repository failed (see [build log](${buildUrl})); use this PR to fix the failure or disable the failing component.`;
+
+            try {
+              // Check if a PR already exists for this failure
+              const prs = await github.rest.pulls.list({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                head: 'triton-ext-auto-fix'
+              });
+
+              if (prs.data.length > 0) {
+                // Update existing PR
+                await github.rest.pulls.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: prs.data[0].number,
+                  body: prBody
+                });
+                console.log(`Updated existing PR #${prs.data[0].number}`);
+              } else {
+                // Create new PR
+                const branch = 'triton-ext-auto-fix';
+
+                // Create branch
+                try {
+                  await github.rest.git.createRef({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    ref: `refs/heads/${branch}`,
+                    sha: context.sha
+                  });
+                } catch (error) {
+                  if (error.status !== 422) { // Branch already exists
+                    throw error;
+                  }
+                }
+
+                // Create PR
+                const pr = await github.rest.pulls.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title: prTitle,
+                  head: branch,
+                  base: context.ref.replace('refs/heads/', ''),
+                  body: prBody
+                });
+                console.log(`Created new PR #${pr.data.number}`);
+              }
+            } catch (error) {
+              console.error('Error creating/updating PR:', error);
+              // Continue despite PR creation failure
+            }
+
+      - name: Report build failure
+        if: failure()
+        run: |
+          echo "::error::triton-ext build failed"
+          exit 1
