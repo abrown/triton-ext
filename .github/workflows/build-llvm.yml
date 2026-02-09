@@ -9,6 +9,12 @@ on:
     - cron: '0 0 * * *'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+env:
+  SCCACHE_DIR: ${{ github.workspace }}/sccache
+
 jobs:
   build-llvm:
     name: Build LLVM
@@ -19,60 +25,101 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: triton-lang/triton
+          path: triton
 
-      - name: Fetch LLVM hash
-        id: fetch-hash
+      - name: Fetch LLVM Commit Hash
+        shell: bash
         run: |
-          HASH=$(cat cmake/llvm-hash.txt | tr -d '[:space:]')
-          echo "hash=$HASH" >> $GITHUB_OUTPUT
-          echo "cache-key=llvm-$HASH" >> $GITHUB_OUTPUT
-          echo "LLVM hash: $HASH"
+          LLVM_COMMIT_HASH="$(cat triton/cmake/llvm-hash.txt)"
+          echo "Found LLVM commit hash: ${LLVM_COMMIT_HASH}"
+          echo "llvm_commit_hash=${LLVM_COMMIT_HASH}" >> ${GITHUB_ENV}
 
-      - name: Check cache
-        id: cache-check
+          SHORT_LLVM_COMMIT_HASH="${LLVM_COMMIT_HASH:0:8}"
+          echo "Short LLVM commit hash: ${SHORT_LLVM_COMMIT_HASH}"
+          echo "short_llvm_commit_hash=${SHORT_LLVM_COMMIT_HASH}" >> ${GITHUB_ENV}
+
+          INSTALL_DIR="llvm-${SHORT_LLVM_COMMIT_HASH}-${{ matrix.config.target-os }}-${{ matrix.config.arch }}"
+          echo "LLVM installation directory name: ${INSTALL_DIR}"
+          echo "llvm_install_dir=${INSTALL_DIR}" >> ${GITHUB_ENV}
+
+      - name: Checkout LLVM
+        uses: actions/checkout@v6
+        with:
+          repository: llvm/llvm-project
+          path: llvm-project
+          ref: ${{ env.llvm_commit_hash }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: 3.11
+
+      - name: Install Prerequisites
+        shell: bash
+        run: |
+          python3 -m pip install cmake ninja sccache
+          mkdir -p ${{ env.SCCACHE_DIR }}
+          rm -rf ${{ env.SCCACHE_DIR }}/*
+
+      - name: Enable Cache
         uses: actions/cache@v4
         with:
-          path: build-llvm
-          key: ${{ steps.fetch-hash.outputs.cache-key }}
-          lookup-only: true
+          path: ${{ env.SCCACHE_DIR }}
+          key: ${{ matrix.config.target-os }}-${{ matrix.config.arch }}-${{ env.short_llvm_commit_hash }}
+          restore-keys: ${{ matrix.config.target-os }}-${{ matrix.config.arch }}-
 
-      - name: Skip if cached
-        if: steps.cache-check.outputs.cache-hit == 'true'
-        run: echo "LLVM artifacts already cached, skipping build"
-
-      - name: Install dependencies
-        if: steps.cache-check.outputs.cache-hit != 'true'
+      - name: Free disk space on Ubuntu
+        if: matrix.config.target-os == 'ubuntu'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            cmake \
-            ninja-build \
-            git \
-            clang \
-            lld
+          df -h
+          echo "Removing large packages"
+          sudo apt-get remove -y 'php.*'
+          sudo apt-get remove -y google-chrome-stable firefox powershell mono-devel
+          sudo apt-get autoremove -y
+          sudo apt-get clean
+          df -h
+          echo "Removing large directories"
+          df -h
 
-      - name: Build LLVM with Triton script
-        if: steps.cache-check.outputs.cache-hit != 'true'
+      - name: Configure, Build, Test, and Install LLVM
+        if: matrix.config.arch == 'x64' && matrix.config.target-os == 'ubuntu'
+        run: >
+          python3 -m pip install -r llvm-project/mlir/python/requirements.txt
+
+          cmake -GNinja -Bllvm-project/build
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+          -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+          -DCMAKE_INSTALL_PREFIX="${{ env.llvm_install_dir }}"
+          -DCMAKE_LINKER=lld
+          -DLLVM_BUILD_UTILS=ON
+          -DLLVM_BUILD_SHARED_LIBS=ON
+          -DLLVM_BUILD_TOOLS=ON
+          -DLLVM_ENABLE_ASSERTIONS=ON
+          -DMLIR_ENABLE_BINDINGS_PYTHON=OFF
+          -DLLVM_ENABLE_PROJECTS="mlir;lld"
+          -DLLVM_INSTALL_UTILS=ON
+          -DLLVM_TARGETS_TO_BUILD="host;NVPTX;AMDGPU"
+          -DLLVM_ENABLE_TERMINFO=OFF
+          -DLLVM_ENABLE_ZSTD=OFF
+          llvm-project/llvm
+
+          ninja -C llvm-project/build check-mlir install
+
+          tar czf "${{ env.llvm_install_dir }}.tar.gz" "${{ env.llvm_install_dir }}"
+
+      - name: Dump Disk Usage
         run: |
-          export LLVM_BUILD_SHARED_LIBS=1
-          export LLVM_INSTALL_PATH="${{ github.workspace }}/build-llvm"
-          export LLVM_PROJECT_PATH="${{ github.workspace }}/llvm-project"
-          export LLVM_BUILD_PATH="${{ github.workspace }}/llvm-project/build"
-          export LLVM_COMMIT_HASH="${{ steps.fetch-hash.outputs.hash }}"
+          du -h ${{ env.llvm_install_dir }}
+          df -h
 
-          ./scripts/build-llvm-project.sh
+      - name: Dump Sccache Statistics
+        run: sccache --show-stats
 
-      - name: Cache LLVM artifacts
-        if: steps.cache-check.outputs.cache-hit != 'true'
-        uses: actions/cache@v4
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
         with:
-          path: build-llvm
-          key: ${{ steps.fetch-hash.outputs.cache-key }}
+          name: llvm-${{ matrix.config.target-os }}-${{ matrix.config.arch }}
+          path: |
+            ${{ github.workspace }}/llvm-*-${{ matrix.config.target-os }}-${{ matrix.config.arch }}.tar.gz
 
-      - name: Verify LLVM build
-        if: steps.cache-check.outputs.cache-hit != 'true'
-        run: |
-          test -f build-llvm/lib/libLLVM.so || exit 1
-          test -f build-llvm/lib/libMLIR.so || exit 1
-          echo "LLVM build verified!"
