@@ -137,6 +137,5 @@ jobs:
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: llvm-${{ matrix.config.target-os }}-${{ matrix.config.arch }}
-          path: |
-            ${{ github.workspace }}/llvm-*-${{ matrix.config.target-os }}-${{ matrix.config.arch }}.tar.gz
+          name: ${{ env.llvm_install_dir }}
+          path: ${{ env.llvm_install_dir }}.tar.gz
