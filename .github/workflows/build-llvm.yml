@@ -33,7 +33,6 @@ jobs:
         # - {runner: 'MacOS ARM64', runs_on: 'macos-15', target-os: 'macos', arch: 'arm64'}
         # - {runner: 'Windows Latest', runs_on: 'windows-latest', target-os: 'windows', arch: 'x64'}
 
-
     steps:
       - name: Checkout Triton
         uses: actions/checkout@v4
