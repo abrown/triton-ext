@@ -18,6 +18,9 @@ outputs:
   triton_install_dir:
     description: The Triton installation directory.
     value: ${{ steps.setup.outputs.triton_install_dir }}
+  triton_build_dir:
+    description: The Triton build directory.
+    value: ${{ steps.build.outputs.triton_build_dir }}
 
 runs:
   using: composite
@@ -42,6 +45,7 @@ runs:
       uses: mozilla-actions/sccache-action@v0.0.6
 
     - name: Build Triton
+      id: build
       working-directory: ${{ steps.setup.outputs.triton_install_dir }}
       shell: bash
       run: >
@@ -52,6 +56,10 @@ runs:
         LLVM_LIBRARY_DIR=${{ inputs.llvm_install_dir }}/lib
         LLVM_SYSPATH=${{ inputs.llvm_install_dir }}
         make dev-install
+
+        TRITON_BUILD_DIR="$(pwd)/build/cmake.*"
+        echo "triton_build_dir=${TRITON_BUILD_DIR}" >> $GITHUB_ENV
+        echo "triton_build_dir=${TRITON_BUILD_DIR}" >> $GITHUB_OUTPUT
 
     - name: Dump Sccache Statistics
       shell: bash
