@@ -165,4 +165,7 @@ runs:
 
           const { execSync } = require('child_process');
           execSync(`unzip -q ${zipPath} -d ${tempDir}`);
-          execSync(`tar xzf ${require('path').join(tempDir, process.env.llvm_install_dir + '.tar.gz')} -C .`);
+          tarDir = require('path').join(tempDir, `${process.env.llvm_install_dir}.tar.gz`);
+          extractDir = process.cwd();
+          console.log(`Extracting ${tarDir} to ${extractDir}`);
+          execSync(`tar xzf ${tarDir} -C ${extractDir}`);
