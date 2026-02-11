@@ -34,17 +34,12 @@ jobs:
         # - {runner: 'Windows Latest', runs_on: 'windows-latest', target-os: 'windows', arch: 'x64'}
 
     steps:
-      - name: Checkout Triton
-        uses: actions/checkout@v4
-        with:
-          repository: triton-lang/triton
-          path: triton
-
-      - name: Fetch LLVM Commit Hash
+      - name: Fetch LLVM commit hash
+        id: get-hash
         shell: bash
         run: |
-          LLVM_COMMIT_HASH="$(cat triton/cmake/llvm-hash.txt)"
-          echo "Found LLVM commit hash: ${LLVM_COMMIT_HASH}"
+          LLVM_COMMIT_HASH="$(python3 ci/fetch-llvm-hash-from-triton.py)"
+          echo "LLVM commit hash from Triton: ${LLVM_COMMIT_HASH}"
           echo "llvm_commit_hash=${LLVM_COMMIT_HASH}" >> ${GITHUB_ENV}
 
           SHORT_LLVM_COMMIT_HASH="${LLVM_COMMIT_HASH:0:8}"
@@ -55,7 +50,25 @@ jobs:
           echo "LLVM installation directory name: ${INSTALL_DIR}"
           echo "llvm_install_dir=${INSTALL_DIR}" >> ${GITHUB_ENV}
 
+      - name: Check if artifact exists
+        id: check-artifact
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const artifacts = await github.rest.actions.listArtifactsForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            const artifact = artifacts.data.artifacts.find(a => a.name == `${process.env.llvm_install_dir}`);
+            if (artifact) {
+              console.log(`Found existing LLVM artifact: ${artifact.name}`);
+              core.setOutput('exists', 'true');
+            } else {
+              core.setOutput('exists', 'false');
+            }
+
       - name: Checkout LLVM
+        if: steps.check-artifact.outputs.exists == 'false'
         uses: actions/checkout@v6
         with:
           repository: llvm/llvm-project
@@ -63,11 +76,13 @@ jobs:
           ref: ${{ env.llvm_commit_hash }}
 
       - name: Set up Python
+        if: steps.check-artifact.outputs.exists == 'false'
         uses: actions/setup-python@v6
         with:
           python-version: 3.11
 
       - name: Install Prerequisites
+        if: steps.check-artifact.outputs.exists == 'false'
         shell: bash
         run: |
           python3 -m pip install cmake ninja sccache
@@ -75,6 +90,7 @@ jobs:
           rm -rf ${{ env.SCCACHE_DIR }}/*
 
       - name: Enable Cache
+        if: steps.check-artifact.outputs.exists == 'false'
         uses: actions/cache@v4
         with:
           path: ${{ env.SCCACHE_DIR }}
@@ -82,7 +98,7 @@ jobs:
           restore-keys: ${{ matrix.config.target-os }}-${{ matrix.config.arch }}-
 
       - name: Free disk space on Ubuntu
-        if: matrix.config.target-os == 'ubuntu'
+        if: steps.check-artifact.outputs.exists == 'false' && matrix.config.target-os == 'ubuntu'
         run: |
           df -h
           echo "Removing large packages"
@@ -95,7 +111,7 @@ jobs:
           df -h
 
       - name: Configure, Build, Test, and Install LLVM
-        if: matrix.config.arch == 'x64' && matrix.config.target-os == 'ubuntu'
+        if: steps.check-artifact.outputs.exists == 'false' && matrix.config.arch == 'x64' && matrix.config.target-os == 'ubuntu'
         # Note that using `LLVM_BUILD_SHARED_LIBS=ON` does not have the desired effect; only by using CMake's
         # `BUILD_SHARED_LIBS` option do we actually get shared libraries. And this is not good practice: LLVM documents
         # how `BUILD_SHARED_LIBS` should not be used for distributing LLVM
@@ -127,14 +143,17 @@ jobs:
           tar czf "${{ env.llvm_install_dir }}.tar.gz" "${{ env.llvm_install_dir }}"
 
       - name: Dump Disk Usage
+        if: steps.check-artifact.outputs.exists == 'false'
         run: |
           du -h ${{ env.llvm_install_dir }}
           df -h
 
       - name: Dump Sccache Statistics
+        if: steps.check-artifact.outputs.exists == 'false'
         run: sccache --show-stats
 
       - name: Upload Build Artifacts
+        if: steps.check-artifact.outputs.exists == 'false'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.llvm_install_dir }}
