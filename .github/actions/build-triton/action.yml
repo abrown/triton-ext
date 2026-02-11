@@ -132,7 +132,7 @@ runs:
       id: find
       shell: bash
       run: |
-        TRITON_BUILD_DIR="${TRITON_INSTALL_DIR}/build/cmake.*"
+        TRITON_BUILD_DIR="${triton_install_dir}/build/cmake.*"
         if [ ! -d "$TRITON_BUILD_DIR" ]; then
           echo "Error: Triton build directory not found at $TRITON_BUILD_DIR"
           exit 1
