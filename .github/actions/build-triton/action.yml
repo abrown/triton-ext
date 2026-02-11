@@ -85,6 +85,7 @@ runs:
         make dev-install
 
     - name: Dump Sccache Statistics
+      if: steps.check-artifact.outputs.exists == 'false'
       shell: bash
       run: sccache --show-stats
 
@@ -132,6 +133,7 @@ runs:
       id: find
       shell: bash
       run: |
+        du -h ${triton_install_dir}
         TRITON_BUILD_DIR="${triton_install_dir}/build/cmake.*"
         if [ ! -d "$TRITON_BUILD_DIR" ]; then
           echo "Error: Triton build directory not found at $TRITON_BUILD_DIR"
