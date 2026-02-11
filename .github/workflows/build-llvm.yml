@@ -7,7 +7,18 @@ on:
   schedule:
     # Run daily to check for upstream changes
     - cron: '0 0 * * *'
+  # We can also trigger this workflow (a) manually and (b) from another workflow. If we pass the LLVM commit has as
+  # input, we build from that; otherwise, we fetch the latest LLVM commit hash from Triton's main branch.
   workflow_dispatch:
+    inputs:
+      llvm_hash:
+        required: false
+        type: string
+  workflow_call:
+    inputs:
+      llvm_hash:
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -43,8 +54,13 @@ jobs:
         id: get-hash
         shell: bash
         run: |
-          LLVM_COMMIT_HASH="$(python3 triton-ext/ci/fetch-llvm-hash-from-triton.py)"
-          echo "LLVM commit hash from Triton: ${LLVM_COMMIT_HASH}"
+          if [ -n "${{ inputs.llvm_hash }}" ]; then
+            LLVM_COMMIT_HASH="${{ inputs.llvm_hash }}"
+            echo "Using provided LLVM hash: ${LLVM_COMMIT_HASH}"
+          else
+            LLVM_COMMIT_HASH="$(python3 triton-ext/ci/fetch-llvm-hash-from-triton.py)"
+            echo "LLVM commit hash from Triton: ${LLVM_COMMIT_HASH}"
+          fi
           echo "llvm_commit_hash=${LLVM_COMMIT_HASH}" >> ${GITHUB_ENV}
 
           SHORT_LLVM_COMMIT_HASH="${LLVM_COMMIT_HASH:0:8}"
