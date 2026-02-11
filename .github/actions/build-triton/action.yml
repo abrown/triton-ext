@@ -1,11 +1,12 @@
 name: Build Triton
 description: |
   Build Triton from a specified commit. This composite action will:
-  - check if a GitHub artifact exists for this LLVM commit, OS, and architecture: `llvm-<short-hash>-<os>-<arch>`
-  - if the artifact does not exist, check out LLVM and build it _as shared libraries_ (required for triton-ext); then,
+  - check if a GitHub artifact exists for this Triton commit, OS, and architecture: `triton-<short-hash>-<os>-<arch>`
+  - if the artifact does not exist, check out Triton and build it, using the given LLVM installation directory; then,
     upload it as an artifact
   - if the artifact does exist, download and extract it
-  - return the path the LLVM installation directory.
+  - return the path the Triton installation directory as well as the build directory inside of it (e.g.,
+    `build/cmake.linux-x86_64-cpython-3.14`).
 
 inputs:
   triton_hash:
@@ -20,7 +21,7 @@ outputs:
     value: ${{ steps.setup.outputs.triton_install_dir }}
   triton_build_dir:
     description: The Triton build directory.
-    value: ${{ steps.build.outputs.triton_build_dir }}
+    value: ${{ steps.find.outputs.triton_build_dir }}
 
 runs:
   using: composite
@@ -41,7 +42,26 @@ runs:
         echo "triton_install_dir=${INSTALL_DIR}" >> ${GITHUB_ENV}
         echo "triton_install_dir=${INSTALL_DIR}" >> ${GITHUB_OUTPUT}
 
+    - name: Check if artifact exists
+      id: check-artifact
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const artifacts = await github.rest.actions.listArtifactsForRepo({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+          });
+          const artifact = artifacts.data.artifacts.find(a => a.name == `${process.env.triton_install_dir}`);
+          if (artifact) {
+            console.log(`Found existing Triton artifact: ${artifact.name}`);
+            core.setOutput('exists', 'true');
+            core.setOutput('artifact_id', artifact.id);
+          } else {
+            core.setOutput('exists', 'false');
+          }
+
     - name: Checkout triton
+      if: steps.check-artifact.outputs.exists == 'false'
       uses: actions/checkout@v4
       with:
         repository: triton-lang/triton
@@ -49,9 +69,11 @@ runs:
         path: ${{ steps.setup.outputs.triton_install_dir }}
 
     - name: Setup sccache
+      if: steps.check-artifact.outputs.exists == 'false'
       uses: mozilla-actions/sccache-action@v0.0.6
 
     - name: Build Triton
+      if: steps.check-artifact.outputs.exists == 'false'
       id: build
       working-directory: ${{ steps.setup.outputs.triton_install_dir }}
       shell: bash
@@ -64,10 +86,55 @@ runs:
         LLVM_SYSPATH=${{ inputs.llvm_install_dir }}
         make dev-install
 
-        TRITON_BUILD_DIR="$(pwd)/build/cmake.*"
-        echo "triton_build_dir=${TRITON_BUILD_DIR}" >> $GITHUB_ENV
-        echo "triton_build_dir=${TRITON_BUILD_DIR}" >> $GITHUB_OUTPUT
-
     - name: Dump Sccache Statistics
       shell: bash
       run: sccache --show-stats
+
+    - name: Package Triton
+      if: steps.check-artifact.outputs.exists == 'false'
+      shell: bash
+      run: |
+        tar czf "${{ env.triton_install_dir }}.tar.gz" "${{ env.triton_install_dir }}"
+
+    - name: Upload Triton artifact
+      if: steps.check-artifact.outputs.exists == 'false'
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ env.triton_install_dir }}
+        path: ${{ env.triton_install_dir }}.tar.gz
+
+    - name: Download Triton artifact
+      if: steps.check-artifact.outputs.exists == 'true'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const artifact_id = core.getOutput('artifact_id');
+          console.log(`Downloading existing Triton artifact: ${artifact_id}`);
+          const download = await github.rest.actions.downloadArtifact({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              artifact_id: core.getOutput('artifact_id'),
+              archive_format: 'zip',
+          });
+
+          const fs = require('fs');
+          const tempDir = require('os').tmpdir();
+          const zipPath = require('path').join(tempDir, `${process.env.triton_install_dir}.zip`);
+          console.log(`Downloading to: ${zipPath}`);
+          fs.writeFileSync(zipPath, Buffer.from(download.data));
+
+          const { execSync } = require('child_process');
+          execSync(`unzip -q ${zipPath} -d ${tempDir}`);
+          execSync(`tar xzf ${require('path').join(tempDir, process.env.triton_install_dir + '.tar.gz')} -C .`);
+
+    - name: Find Triton build directory
+      id: find
+      shell: bash
+      run: |
+        TRITON_BUILD_DIR="${TRITON_INSTALL_DIR}/build/cmake.*"
+        if [ ! -d "$TRITON_BUILD_DIR" ]; then
+          echo "Error: Triton build directory not found at $TRITON_BUILD_DIR"
+          exit 1
+        fi
+        echo "triton_build_dir=${TRITON_BUILD_DIR}" >> $GITHUB_ENV
+        echo "triton_build_dir=${TRITON_BUILD_DIR}" >> $GITHUB_OUTPUT

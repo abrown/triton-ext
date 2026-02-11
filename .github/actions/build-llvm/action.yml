@@ -166,7 +166,3 @@ runs:
           const { execSync } = require('child_process');
           execSync(`unzip -q ${zipPath} -d ${tempDir}`);
           execSync(`tar xzf ${require('path').join(tempDir, process.env.llvm_install_dir + '.tar.gz')} -C .`);
-
-    - name: Dump Sccache Statistics
-      shell: bash
-      run: sccache --show-stats
