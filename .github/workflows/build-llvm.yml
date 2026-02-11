@@ -34,11 +34,16 @@ jobs:
         # - {runner: 'Windows Latest', runs_on: 'windows-latest', target-os: 'windows', arch: 'x64'}
 
     steps:
+      - name: Checkout triton-ext
+        uses: actions/checkout@v4
+        with:
+          path: triton-ext
+
       - name: Fetch LLVM commit hash
         id: get-hash
         shell: bash
         run: |
-          LLVM_COMMIT_HASH="$(python3 ci/fetch-llvm-hash-from-triton.py)"
+          LLVM_COMMIT_HASH="$(python3 triton-ext/ci/fetch-llvm-hash-from-triton.py)"
           echo "LLVM commit hash from Triton: ${LLVM_COMMIT_HASH}"
           echo "llvm_commit_hash=${LLVM_COMMIT_HASH}" >> ${GITHUB_ENV}
 
