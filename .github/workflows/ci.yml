@@ -1,4 +1,8 @@
 name: CI
+description: |
+  Continuous integration workflow for triton-ext.
+  - Build triton-ext dependencies: LLVM and Triton
+  - Create a parallel directory structure in the workspace: `triton-ext`, `triton`, and `llvm-<hash>-<os>-<arch>`.
 
 on:
   push:
@@ -54,13 +58,13 @@ jobs:
 
       - name: Build LLVM
         id: build-llvm
-        uses: ./.github/actions/build-llvm
+        uses: triton-ext/.github/actions/build-llvm
         with:
           llvm_hash: ${{ steps.hashes.outputs.llvm_hash }}
 
       - name: Build Triton
         id: build-triton
-        uses: ./.github/actions/build-triton
+        uses: triton-ext/.github/actions/build-triton
         with:
           triton_hash: ${{ steps.hashes.outputs.triton_hash }}
           llvm_install_dir: ${{ steps.build-llvm.outputs.llvm_install_dir }}
