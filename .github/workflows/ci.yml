@@ -16,9 +16,6 @@ on:
 permissions:
   contents: read
 
-env:
-  SCCACHE_DIR: ${{ github.workspace }}/sccache
-
 jobs:
   build:
     name: Build on ${{ matrix.config.runner }}

@@ -20,6 +20,7 @@ outputs:
     value: ${{ steps.setup.outputs.triton_install_dir }}
 
 runs:
+  using: composite
   steps:
     - name: Determine Triton installation directory
       id: setup
@@ -37,13 +38,21 @@ runs:
         ref: ${{ inputs.triton_hash }}
         path: ${{ steps.setup.outputs.triton_install_dir }}
 
+    - name: Setup sccache
+      uses: mozilla-actions/sccache-action@v0.0.6
+
     - name: Build Triton
       working-directory: ${{ steps.setup.outputs.triton_install_dir }}
       shell: bash
       run: >
-        TRITON_BUILD_WITH_CLANG_LLD=1 TRITON_BUILD_WITH_CCACHE=0
-        LLVM_INCLUDE_DIRS=$(LLVM_BUILD_PATH)/include
-        LLVM_LIBRARY_DIR=$(LLVM_BUILD_PATH)/lib
-        LLVM_SYSPATH=$(LLVM_BUILD_PATH)
+        TRITON_BUILD_WITH_CLANG_LLD=1
+        CMAKE_C_COMPILER_LAUNCHER=sccache
+        CMAKE_CXX_COMPILER_LAUNCHER=sccache
+        LLVM_INCLUDE_DIRS=${{ inputs.llvm_install_dir }}/include
+        LLVM_LIBRARY_DIR=${{ inputs.llvm_install_dir }}/lib
+        LLVM_SYSPATH=${{ inputs.llvm_install_dir }}
         make dev-install
 
+    - name: Dump Sccache Statistics
+      shell: bash
+      run: sccache --show-stats

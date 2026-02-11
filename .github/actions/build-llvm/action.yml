@@ -74,17 +74,7 @@ runs:
       if: steps.check-artifact.outputs.exists == 'false'
       shell: bash
       run: |
-        python3 -m pip install cmake ninja sccache
-        mkdir -p ${{ env.SCCACHE_DIR }}
-        rm -rf ${{ env.SCCACHE_DIR }}/*
-
-    - name: Enable Cache
-      if: steps.check-artifact.outputs.exists == 'false'
-      uses: actions/cache@v4
-      with:
-        path: ${{ env.SCCACHE_DIR }}
-        key: ${{ matrix.config.target-os }}-${{ matrix.config.arch }}-${{ env.short_llvm_commit_hash }}
-        restore-keys: ${{ matrix.config.target-os }}-${{ matrix.config.arch }}-
+        python3 -m pip install cmake ninja
 
     - name: Free disk space on Ubuntu
       if: steps.check-artifact.outputs.exists == 'false' && matrix.config.target-os == 'ubuntu'
@@ -100,7 +90,11 @@ runs:
         echo "Removing large directories"
         df -h
 
-    - name: Configure, Build, Test, and Install LLVM
+    - name: Setup sccache
+      if: steps.check-artifact.outputs.exists == 'false'
+      uses: mozilla-actions/sccache-action@v0.0.6
+
+    - name: Build LLVM
       if: steps.check-artifact.outputs.exists == 'false' && matrix.config.arch == 'x64' && matrix.config.target-os == 'ubuntu'
       # Note that using `LLVM_BUILD_SHARED_LIBS=ON` does not have the desired effect; only by using CMake's
       # `BUILD_SHARED_LIBS` option do we actually get shared libraries. And this is not good practice: LLVM documents
@@ -175,3 +169,7 @@ runs:
           const { execSync } = require('child_process');
           execSync(`unzip -q ${zipPath} -d ${tempDir}`);
           execSync(`tar xzf ${require('path').join(tempDir, process.env.llvm_install_dir + '.tar.gz')} -C .`);
+
+    - name: Dump Sccache Statistics
+      shell: bash
+      run: sccache --show-stats
