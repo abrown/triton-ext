@@ -65,7 +65,4 @@ jobs:
 
       - name: List files
         shell: bash
-        run: |
-          echo "LLVM installation directory contents:"
-          du -h .
-
+        run: du -h .
