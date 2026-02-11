@@ -67,7 +67,9 @@ jobs:
           echo "Short LLVM commit hash: ${SHORT_LLVM_COMMIT_HASH}"
           echo "short_llvm_commit_hash=${SHORT_LLVM_COMMIT_HASH}" >> ${GITHUB_ENV}
 
-          INSTALL_DIR="llvm-${SHORT_LLVM_COMMIT_HASH}-${{ matrix.config.target-os }}-${{ matrix.config.arch }}"
+          RUNNER_OS="$(echo "${{ runner.os }}" | tr '[:upper:]' '[:lower:]')"
+          RUNNER_ARCH="$(echo "${{ runner.arch }}" | tr '[:upper:]' '[:lower:]')"
+          INSTALL_DIR="llvm-${SHORT_LLVM_COMMIT_HASH}-${RUNNER_OS}-${RUNNER_ARCH}"
           echo "LLVM installation directory name: ${INSTALL_DIR}"
           echo "llvm_install_dir=${INSTALL_DIR}" >> ${GITHUB_ENV}
 
