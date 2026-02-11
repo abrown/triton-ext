@@ -8,6 +8,8 @@ description: |
   - return the path the Triton installation directory as well as the build directory inside of it (e.g.,
     `build/cmake.linux-x86_64-cpython-3.14`).
 
+  This action expects `sccache` to be set up by the caller.
+
 inputs:
   triton_hash:
     description: Triton commit hash to build.
@@ -67,10 +69,6 @@ runs:
         repository: triton-lang/triton
         ref: ${{ inputs.triton_hash }}
         path: ${{ steps.setup.outputs.triton_install_dir }}
-
-    - name: Setup sccache
-      if: steps.check-artifact.outputs.exists == 'false'
-      uses: mozilla-actions/sccache-action@v0.0.6
 
     - name: Build Triton
       if: steps.check-artifact.outputs.exists == 'false'

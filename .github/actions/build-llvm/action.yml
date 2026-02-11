@@ -7,6 +7,8 @@ description: |
   - if the artifact does exist, download and extract it
   - return the path the LLVM installation directory.
 
+  This action expects `sccache` to be set up by the caller.
+
 inputs:
   llvm_hash:
     description: LLVM commit hash to build.
@@ -86,10 +88,6 @@ runs:
         df -h
         echo "Removing large directories"
         df -h
-
-    - name: Setup sccache
-      if: steps.check-artifact.outputs.exists == 'false'
-      uses: mozilla-actions/sccache-action@v0.0.6
 
     - name: Build LLVM
       if: steps.check-artifact.outputs.exists == 'false' && matrix.config.arch == 'x64' && matrix.config.target-os == 'ubuntu'

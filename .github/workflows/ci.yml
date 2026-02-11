@@ -50,6 +50,11 @@ jobs:
           echo "llvm_hash=$LLVM_HASH" >> $GITHUB_OUTPUT
           echo "LLVM hash: $LLVM_HASH"
 
+      - name: Setup sccache
+        if: steps.check-artifact.outputs.exists == 'false'
+        uses: mozilla-actions/sccache-action@v0.0.9
+        # Both LLVM and Triton builds use sccache, so we set it up at the beginning of the workflow.
+
       - name: Build LLVM
         id: build-llvm
         uses: ./.github/actions/build-llvm
