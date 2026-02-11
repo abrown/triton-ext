@@ -50,6 +50,15 @@ jobs:
           echo "llvm_hash=$LLVM_HASH" >> $GITHUB_OUTPUT
           echo "LLVM hash: $LLVM_HASH"
 
+      - name: Setup virtual environment
+        shell: bash
+        run: |
+          python3 -m venv ~/.venv
+          source ~/.venv/bin/activate
+          python3 -m pip install --upgrade pip
+          echo "pip version: $(pip --version)"
+          echo "python version: $(python --version)"
+
       - name: Setup sccache
         if: steps.check-artifact.outputs.exists == 'false'
         uses: mozilla-actions/sccache-action@v0.0.9
@@ -66,7 +75,7 @@ jobs:
         uses: ./.github/actions/build-triton
         with:
           triton_hash: ${{ steps.hashes.outputs.triton_hash }}
-          llvm_install_dir: ${{ steps.build-llvm.outputs.llvm_install_dir }}
+          llvm_install_dir: ${{ github.workspace }}/${{ steps.build-llvm.outputs.llvm_install_dir }}
 
       - name: List files
         shell: bash
