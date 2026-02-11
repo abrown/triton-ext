@@ -148,12 +148,12 @@ runs:
       uses: actions/github-script@v7
       with:
         script: |
-          const artifact_id = core.getOutput('artifact_id');
+          const artifact_id = '${{ steps.check-artifact.outputs.artifact_id }}';
           console.log(`Downloading existing LLVM artifact: ${artifact_id}`);
           const download = await github.rest.actions.downloadArtifact({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              artifact_id: core.getOutput('artifact_id'),
+              artifact_id: artifact_id,
               archive_format: 'zip',
           });
 
