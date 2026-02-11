@@ -50,6 +50,11 @@ jobs:
           echo "llvm_hash=$LLVM_HASH" >> $GITHUB_OUTPUT
           echo "LLVM hash: $LLVM_HASH"
 
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: 3.11
+
       - name: Setup virtual environment
         shell: bash
         run: |
