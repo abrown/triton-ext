@@ -6,6 +6,7 @@ description: |
     upload it as an artifact
   - if the artifact does exist, download and extract it
   - return the path the LLVM installation directory.
+
 inputs:
   triton_hash:
     description: Triton commit hash to build.
@@ -17,6 +18,7 @@ outputs:
   triton_install_dir:
     description: The Triton installation directory.
     value: ${{ steps.setup.outputs.triton_install_dir }}
+
 runs:
   steps:
     - name: Determine Triton installation directory
