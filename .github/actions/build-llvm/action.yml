@@ -28,13 +28,10 @@ runs:
         echo "llvm_commit_hash=${LLVM_COMMIT_HASH}" >> ${GITHUB_ENV}
 
         SHORT_LLVM_COMMIT_HASH="${LLVM_COMMIT_HASH:0:8}"
-        echo "Short LLVM commit hash: ${SHORT_LLVM_COMMIT_HASH}"
-        echo "short_llvm_commit_hash=${SHORT_LLVM_COMMIT_HASH}" >> ${GITHUB_ENV}
-
         RUNNER_OS="$(echo "${{ runner.os }}" | tr '[:upper:]' '[:lower:]')"
         RUNNER_ARCH="$(echo "${{ runner.arch }}" | tr '[:upper:]' '[:lower:]')"
         INSTALL_DIR="llvm-${SHORT_LLVM_COMMIT_HASH}-${RUNNER_OS}-${RUNNER_ARCH}"
-        echo "LLVM installation directory name: ${INSTALL_DIR}"
+        echo "LLVM installation directory: ${INSTALL_DIR}"
         echo "llvm_install_dir=${INSTALL_DIR}" >> ${GITHUB_ENV}
         echo "llvm_install_dir=${INSTALL_DIR}" >> ${GITHUB_OUTPUT}
 

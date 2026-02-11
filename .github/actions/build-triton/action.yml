@@ -29,10 +29,17 @@ runs:
       id: setup
       shell: bash
       run: |
-        TRITON_INSTALL_DIR="${{ github.workspace }}/triton"
-        echo "Triton installation directory: ${TRITON_INSTALL_DIR}"
-        echo "triton_install_dir=${TRITON_INSTALL_DIR}" >> ${GITHUB_ENV}
-        echo "triton_install_dir=${TRITON_INSTALL_DIR}" >> ${GITHUB_OUTPUT}
+        TRITON_COMMIT_HASH="${{ inputs.triton_hash }}"
+        echo "Using provided Triton hash: ${TRITON_COMMIT_HASH}"
+        echo "triton_commit_hash=${TRITON_COMMIT_HASH}" >> ${GITHUB_ENV}
+
+        SHORT_TRITON_COMMIT_HASH="${TRITON_COMMIT_HASH:0:8}"
+        RUNNER_OS="$(echo "${{ runner.os }}" | tr '[:upper:]' '[:lower:]')"
+        RUNNER_ARCH="$(echo "${{ runner.arch }}" | tr '[:upper:]' '[:lower:]')"
+        INSTALL_DIR="triton-${SHORT_TRITON_COMMIT_HASH}-${RUNNER_OS}-${RUNNER_ARCH}"
+        echo "Triton installation directory: ${INSTALL_DIR}"
+        echo "triton_install_dir=${INSTALL_DIR}" >> ${GITHUB_ENV}
+        echo "triton_install_dir=${INSTALL_DIR}" >> ${GITHUB_OUTPUT}
 
     - name: Checkout triton
       uses: actions/checkout@v4
