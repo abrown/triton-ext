@@ -1,27 +1,32 @@
 name: Build LLVM
-description: Build LLVM from a specified or latest upstream commit.
+description: |
+  Build LLVM from a specified commit. This composite action will:
+  - check if a GitHub artifact exists for this LLVM commit, OS, and architecture: `llvm-<short-hash>-<os>-<arch>`
+  - if the artifact does not exist, check out LLVM and build it _as shared libraries_ (required for triton-ext); then,
+    upload it as an artifact
+  - if the artifact does exist, download and extract it
+  - return the path the LLVM installation directory.
+
 inputs:
   llvm_hash:
-    description: Optional LLVM commit hash to build.
-    required: false
+    description: LLVM commit hash to build.
+    required: true
 outputs:
   llvm_install_dir:
     description: LLVM installation directory name.
     value: ${{ steps.get-hash.outputs.llvm_install_dir }}
+
 runs:
   using: composite
+  env:
+    SCCACHE_DIR: ${{ github.workspace }}/sccache
   steps:
     - name: Fetch LLVM commit hash
       id: get-hash
       shell: bash
       run: |
-        if [ -n "${{ inputs.llvm_hash }}" ]; then
-          LLVM_COMMIT_HASH="${{ inputs.llvm_hash }}"
-          echo "Using provided LLVM hash: ${LLVM_COMMIT_HASH}"
-        else
-          LLVM_COMMIT_HASH="$(python3 ci/fetch-llvm-hash-from-triton.py)"
-          echo "LLVM commit hash from Triton: ${LLVM_COMMIT_HASH}"
-        fi
+        LLVM_COMMIT_HASH="${{ inputs.llvm_hash }}"
+        echo "Using provided LLVM hash: ${LLVM_COMMIT_HASH}"
         echo "llvm_commit_hash=${LLVM_COMMIT_HASH}" >> ${GITHUB_ENV}
 
         SHORT_LLVM_COMMIT_HASH="${LLVM_COMMIT_HASH:0:8}"

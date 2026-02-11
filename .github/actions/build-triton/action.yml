@@ -1,0 +1,47 @@
+name: Build Triton
+description: |
+  Build Triton from a specified commit. This composite action will:
+  - check if a GitHub artifact exists for this LLVM commit, OS, and architecture: `llvm-<short-hash>-<os>-<arch>`
+  - if the artifact does not exist, check out LLVM and build it _as shared libraries_ (required for triton-ext); then,
+    upload it as an artifact
+  - if the artifact does exist, download and extract it
+  - return the path the LLVM installation directory.
+inputs:
+  triton_hash:
+    description: Triton commit hash to build.
+    required: true
+  llvm_install_dir:
+    description: The LLVM installation directory.
+    required: true
+outputs:
+  triton_install_dir:
+    description: The Triton installation directory.
+    value: ${{ steps.setup.outputs.triton_install_dir }}
+runs:
+  steps:
+    - name: Determine Triton installation directory
+      id: setup
+      shell: bash
+      run: |
+        TRITON_INSTALL_DIR="${{ github.workspace }}/triton"
+        echo "Triton installation directory: ${TRITON_INSTALL_DIR}"
+        echo "triton_install_dir=${TRITON_INSTALL_DIR}" >> ${GITHUB_ENV}
+        echo "triton_install_dir=${TRITON_INSTALL_DIR}" >> ${GITHUB_OUTPUT}
+
+    - name: Checkout triton
+      uses: actions/checkout@v4
+      with:
+        repository: triton-lang/triton
+        ref: ${{ inputs.triton_hash }}
+        path: ${{ steps.setup.outputs.triton_install_dir }}
+
+    - name: Build Triton
+      working-directory: ${{ steps.setup.outputs.triton_install_dir }}
+      shell: bash
+      run: >
+        TRITON_BUILD_WITH_CLANG_LLD=1 TRITON_BUILD_WITH_CCACHE=0
+        LLVM_INCLUDE_DIRS=$(LLVM_BUILD_PATH)/include
+        LLVM_LIBRARY_DIR=$(LLVM_BUILD_PATH)/lib
+        LLVM_SYSPATH=$(LLVM_BUILD_PATH)
+        make dev-install
+

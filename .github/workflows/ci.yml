@@ -1,24 +1,14 @@
-name: Build LLVM
+name: CI
 
 on:
   push:
     paths:
       - '.github/workflows/**'
+      - '.github/actions/**'
   schedule:
     # Run daily to check for upstream changes
     - cron: '0 0 * * *'
-  # We can also trigger this workflow (a) manually and (b) from another workflow. If we pass the LLVM commit has as
-  # input, we build from that; otherwise, we fetch the latest LLVM commit hash from Triton's main branch.
   workflow_dispatch:
-    inputs:
-      llvm_hash:
-        required: false
-        type: string
-  workflow_call:
-    inputs:
-      llvm_hash:
-        required: false
-        type: string
 
 permissions:
   contents: read
@@ -27,7 +17,7 @@ env:
   SCCACHE_DIR: ${{ github.workspace }}/sccache
 
 jobs:
-  build-llvm:
+  build:
     name: Build on ${{ matrix.config.runner }}
     runs-on: ${{ matrix.config.runs_on }}
     timeout-minutes: 300
@@ -47,8 +37,37 @@ jobs:
     steps:
       - name: Checkout triton-ext
         uses: actions/checkout@v4
+        with:
+          path: triton-ext
 
-      - name: Build LLVM (composite action)
+      - name: Collect commit hashes
+        id: hashes
+        shell: bash
+        run: |
+          TRITON_HASH=$(triton-ext/ci/fetch-triton-hash.py)
+          echo "triton_hash=$TRITON_HASH" >> $GITHUB_OUTPUT
+          echo "Triton hash: $TRITON_HASH"
+
+          LLVM_HASH=$(triton-ext/ci/fetch-llvm-hash-from-triton.py $TRITON_HASH)
+          echo "llvm_hash=$LLVM_HASH" >> $GITHUB_OUTPUT
+          echo "LLVM hash: $LLVM_HASH"
+
+      - name: Build LLVM
+        id: build-llvm
         uses: ./.github/actions/build-llvm
         with:
-          llvm_hash: ${{ inputs.llvm_hash }}
+          llvm_hash: ${{ steps.hashes.outputs.llvm_hash }}
+
+      - name: Build Triton
+        id: build-triton
+        uses: ./.github/actions/build-triton
+        with:
+          triton_hash: ${{ steps.hashes.outputs.triton_hash }}
+          llvm_install_dir: ${{ steps.build-llvm.outputs.llvm_install_dir }}
+
+      - name: List files
+        shell: bash
+        run: |
+          echo "LLVM installation directory contents:"
+          du -h .
+
