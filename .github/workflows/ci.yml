@@ -27,12 +27,8 @@ jobs:
       matrix:
         config:
         - {runner: 'Ubuntu 22.04', runs_on: 'ubuntu-22.04', target-os: 'ubuntu', arch: 'x64'}
-        # - {runner: 'Ubuntu 22.04 ARM64', runs_on: 'ubuntu-22.04', target-os: 'ubuntu', arch: 'arm64'}
-        # - {runner: 'AlmaLinux 8', runs_on: ['self-hosted', 'CPU'], target-os: 'almalinux', arch: 'x64'}
-        # - {runner: 'AlmaLinux 8 ARM64', runs_on: 'ubuntu-22.04-arm', target-os: 'almalinux', arch: 'arm64'}
-        # - {runner: 'MacOS X64', runs_on: 'macos-15', target-os: 'macos', arch: 'x64'}
-        # - {runner: 'MacOS ARM64', runs_on: 'macos-15', target-os: 'macos', arch: 'arm64'}
-        # - {runner: 'Windows Latest', runs_on: 'windows-latest', target-os: 'windows', arch: 'x64'}
+        # Eventually, this matrix can be expanded to include more platforms (see
+        # `triton/.github/workflows/llvm-build.yml`):
 
     steps:
       - name: Checkout triton-ext
@@ -81,11 +77,7 @@ jobs:
           triton_hash: ${{ steps.hashes.outputs.triton_hash }}
           llvm_install_dir: ${{ github.workspace }}/${{ steps.build-llvm.outputs.llvm_install_dir }}
 
-      - name: List files
-        shell: bash
-        run: du -d 3 -h .
-
-      - name: Build extensions
+      - name: Build Triton extensions
         shell: bash
         run: >
           mkdir build
@@ -94,5 +86,11 @@ jobs:
           TRITON_DIR=${{ steps.build-triton.outputs.triton_install_dir }}
           TRITON_BUILD_DIR=${{ steps.build-triton.outputs.triton_build_dir }}
           cmake -S . -B build -G Ninja
+          -DCMAKE_C_COMPILER_LAUNCHER=sccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
 
           cmake --build build
+
+      - name: List files
+        shell: bash
+        run: du -d 3 -h .
