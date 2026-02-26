@@ -57,8 +57,8 @@ runs:
       uses: actions/checkout@v4
       with:
         repository: llvm/llvm-project
-        path: llvm-project
         ref: ${{ env.llvm_commit_hash }}
+        path: llvm-project
 
     - name: Set up Python
       if: steps.check-artifact.outputs.exists == 'false'

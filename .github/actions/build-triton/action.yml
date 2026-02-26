@@ -19,11 +19,8 @@ inputs:
     required: true
 outputs:
   triton_install_dir:
-    description: The Triton installation directory.
+    description: The Triton installation directory name.
     value: ${{ steps.setup.outputs.triton_install_dir }}
-  triton_build_dir:
-    description: The Triton build directory.
-    value: ${{ steps.find.outputs.triton_build_dir }}
 
 runs:
   using: composite
@@ -70,7 +67,6 @@ runs:
     - name: Build Triton
       if: steps.check-artifact.outputs.exists == 'false'
       id: build
-      working-directory: ${{ steps.setup.outputs.triton_install_dir }}
       shell: bash
       run: >
         TRITON_BUILD_WITH_CLANG_LLD=1
@@ -80,6 +76,7 @@ runs:
         LLVM_LIBRARY_DIR=${{ inputs.llvm_install_dir }}/lib
         LLVM_SYSPATH=${{ inputs.llvm_install_dir }}
         make dev-install
+      working-directory: triton
 
     - name: Dump Sccache Statistics
       if: steps.check-artifact.outputs.exists == 'false'
@@ -90,7 +87,9 @@ runs:
       if: steps.check-artifact.outputs.exists == 'false'
       shell: bash
       run: |
-        tar czf "${{ env.triton_install_dir }}.tar.gz" --exclude=.git "${{ env.triton_install_dir }}"
+        make install
+        tar czf "${{ env.triton_install_dir }}.tar.gz" build/install
+      working-directory: triton
 
     - name: Upload Triton artifact
       if: steps.check-artifact.outputs.exists == 'false'
@@ -98,3 +97,4 @@ runs:
       with:
         name: ${{ env.triton_install_dir }}
         path: ${{ env.triton_install_dir }}.tar.gz
+      working-directory: triton
