@@ -23,14 +23,24 @@ import subprocess
 import logging
 
 
+def sizeof(num, suffix="B"):
+    """Convert a byte size into a human-readable format; from the best of StackOverflow: https://stackoverflow.com/a/1094933"""
+    for unit in ("", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi"):
+        if abs(num) < 1024.0:
+            return f"{num:3.1f}{unit}{suffix}"
+        num /= 1024.0
+    return f"{num:.1f}Yi{suffix}"
+
+
 @dataclass
 class Artifact:
     id: int
     name: str
     created_at: str
+    size_in_bytes: int
 
     def __str__(self):
-        return f"{self.name} = {self.id} ({self.created_at})"
+        return f"{self.name} = {self.id} ({self.created_at}, {sizeof(self.size_in_bytes)})"
 
 
 def fetch(repository) -> list[Artifact]:
@@ -41,7 +51,7 @@ def fetch(repository) -> list[Artifact]:
     artifacts_data = json.loads(result.stdout)
     logging.debug(f"Fetched artifacts: {json.dumps(artifacts_data, indent=2)}")
     artifacts = [
-        Artifact(id=a['id'], name=a['name'], created_at=a['created_at'])
+        Artifact(id=a['id'], name=a['name'], created_at=a['created_at'], size_in_bytes=a['size_in_bytes'])
         for a in artifacts_data['artifacts']
     ]
     artifacts.sort(key=lambda a: a.created_at, reverse=True)
@@ -61,9 +71,7 @@ def choose(artifacts, artifact_name):
         if artifact.name == artifact_name:
             return artifact.id
     if not artifact_id:
-        print(
-            f"[ERROR] Artifact {artifact_name} not found; available artifacts:",
-            file=sys.stderr)
+        print(f"[ERROR] Artifact {artifact_name} not found; available artifacts:", file=sys.stderr)
         print_all(artifacts)
         sys.exit(1)
 
