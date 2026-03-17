@@ -3,12 +3,7 @@ project(TritonExtensionSupport)
 add_mlir_library(${PROJECT_NAME}
     Export.cpp
     PARTIAL_SOURCES_INTENDED
-
     SHARED
-
-    LINK_LIBS PUBLIC
-    ${TRITON_LIB}
-    "$<$<PLATFORM_ID:Darwin>:-undefined dynamic_lookup>"
 )
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
