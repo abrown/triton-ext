@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "triton-foo"
+version = "0.1.0"
+description = "Stub Triton backend for the foo target"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.entry-points."triton.backends"]
+foo = "triton_foo"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["triton_foo*"]
