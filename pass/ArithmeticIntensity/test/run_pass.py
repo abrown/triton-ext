@@ -10,8 +10,8 @@ Usage:
 """
 
 import sys
-
 from triton._C.libtriton import ir, passes
+import triton_arithmetic_intensity  # noqa: F401
 
 if len(sys.argv) != 2:
     print(f"usage: {sys.argv[0]} <mlir_file>", file=sys.stderr)

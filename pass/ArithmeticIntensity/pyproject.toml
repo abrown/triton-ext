@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "triton-arithmetic-intensity"
+version = "0.1.0"
+description = "Extend Triton with the arithmetic intensity pass"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["python"]
+include = ["triton_arithmetic_intensity*"]
+
+[tool.triton-ext]
+status = "experimental"
+enabled = true

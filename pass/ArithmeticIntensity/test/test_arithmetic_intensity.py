@@ -23,6 +23,7 @@ BUILD_DIR = Path(os.environ.get("BUILD_DIR", PROJECT_ROOT / "build"))
 TRITON_INSTALL_DIR = Path(os.environ["TRITON_INSTALL_DIR"])
 LLVM_INSTALL_DIR = Path(os.environ["LLVM_INSTALL_DIR"])
 RUN_PASS_SCRIPT = Path(__file__).resolve().parent / "run_pass.py"
+PYTHON_DIR = Path(__file__).resolve().parents[1] / "python"
 PLUGIN_LIB = BUILD_DIR / "lib" / "libarithmetic_intensity.so"
 
 
@@ -35,9 +36,11 @@ def run_pass():
 
     env_overrides = {
         "TRITON_PLUGIN_PATHS": str(PLUGIN_LIB),
-        "PYTHONPATH": str(TRITON_INSTALL_DIR / "python"),
+        "PYTHONPATH":
+        str(TRITON_INSTALL_DIR / "python") + ':' + str(PYTHON_DIR),
         "LD_LIBRARY_PATH": str(LLVM_INSTALL_DIR / "lib"),
     }
+    print(env_overrides)
 
     def _run(mlir: str) -> str:
         with tempfile.NamedTemporaryFile(mode="w",
