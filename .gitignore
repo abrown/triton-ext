@@ -4,3 +4,9 @@ triton-*
 !triton-ext.toml
 *.pyc
 .venv
+
+# Python packaging / compiled extension artifacts.
+*.egg-info/
+*.so
+*.dylib
+*.dll

@@ -1,8 +1,9 @@
 """Check the arithmetic-intensity plugin pass.
 
-Each test spawns a subprocess executing `run_pass.py` with a modified
-environment: `TRITON_PLUGIN_PATHS`, `PYTHONPATH`, and `LD_LIBRARY_PATH` set.
-`run_pass.py` accepts an MLIR file, runs the pass on it, and prints the
+The pass ships as the installed ``triton_arithmetic_intensity`` package, which
+loads its bundled plugin library on import. Each test spawns a subprocess
+executing ``run_pass.py`` (for isolation) with no special environment:
+``run_pass.py`` accepts an MLIR file, runs the pass on it, and prints the
 transformed IR to stdout.
 """
 
@@ -18,29 +19,19 @@ from pathlib import Path
 
 import pytest
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-BUILD_DIR = Path(os.environ.get("BUILD_DIR", PROJECT_ROOT / "build"))
-TRITON_INSTALL_DIR = Path(os.environ["TRITON_INSTALL_DIR"])
-LLVM_INSTALL_DIR = Path(os.environ["LLVM_INSTALL_DIR"])
 RUN_PASS_SCRIPT = Path(__file__).resolve().parent / "run_pass.py"
-PYTHON_DIR = Path(__file__).resolve().parents[1] / "python"
-PLUGIN_LIB = BUILD_DIR / "lib" / "libarithmetic_intensity.so"
 
 
 @pytest.fixture(scope="module")
 def run_pass():
     """Return a callable that parses MLIR text, runs the pass, returns IR."""
 
-    if not PLUGIN_LIB.exists():
-        pytest.fail(f"plugin library not found; build {PLUGIN_LIB}.")
-
-    env_overrides = {
-        "TRITON_PLUGIN_PATHS": str(PLUGIN_LIB),
-        "PYTHONPATH":
-        str(TRITON_INSTALL_DIR / "python") + ':' + str(PYTHON_DIR),
-        "LD_LIBRARY_PATH": str(LLVM_INSTALL_DIR / "lib"),
-    }
-    print(env_overrides)
+    # Skip (rather than fail) if the package is not importable so that a plain
+    # repo-wide pytest run without the extension installed stays green; build it
+    # with `pip install -e pass/ArithmeticIntensity` to exercise these tests.
+    pytest.importorskip("triton_arithmetic_intensity",
+                        reason="triton_arithmetic_intensity not installed; "
+                        "run `pip install -e pass/ArithmeticIntensity`")
 
     def _run(mlir: str) -> str:
         with tempfile.NamedTemporaryFile(mode="w",
@@ -49,10 +40,8 @@ def run_pass():
             f.write(textwrap.dedent(mlir))
             path = f.name
         try:
-            env = {**os.environ, **env_overrides}
             result = subprocess.run(
                 [sys.executable, str(RUN_PASS_SCRIPT), path],
-                env=env,
                 capture_output=True,
                 text=True,
                 check=False,

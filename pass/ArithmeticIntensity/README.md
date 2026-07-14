@@ -2,66 +2,63 @@
 
 This pass analyzes the arithmetic intensity of a given Triton function.
 
-## WIP: "extensions as packages"
+## Extensions as Python packages
 
-This pass also demonstrates how to distribute an extension as a Python package.
-This is a work in progress, relying on unmerged upstream changes--use at your
-own risk:
+This pass demonstrates how to distribute an extension as a self-contained Python
+package that links against a **Triton wheel** instead of the standalone
+LLVM/Triton shared libraries. The compiled plugin (`libarithmetic_intensity.so`)
+is bundled *inside* the `triton_arithmetic_intensity` package and loaded on
+import via Triton's plugin API, so there is no `TRITON_PLUGIN_PATHS`,
+`LD_LIBRARY_PATH`, or `PYTHONPATH` wiring.
 
-- upstream Triton must contain [#10775]
+### Requirements
 
-- upstream Triton must be built as in CI:
+- A **Triton wheel built with `TRITON_EXT_ENABLED=1`** (>= the version that adds
+  the `passes.plugin.extend_with` binding, upstream [#10775]). Such a wheel
+  ships `triton/_C/libtriton.so` (which re-exports the MLIR/LLVM symbols the
+  plugin needs) and the `triton/include` C++ headers. Install it into a virtual
+  environment using the **same Python** the wheel targets (e.g. cp314):
 
   ```console
-  export LLVM_INSTALL_DIR=$(realpath ../triton-ext/llvm-*)
-  LLVM_INCLUDE_DIRS=$LLVM_INSTALL_DIR/include \
-    LLVM_LIBRARY_DIR=$LLVM_INSTALL_DIR/lib \
-    LLVM_SYSPATH=$LLVM_INSTALL_DIR \
-    TRITON_BUILD_WITH_CLANG_LLD=1 \
-    TRITON_EXT_ENABLED=1 \
-    MAX_JOBS=8 \
-        make dev-install
-  make install
+  python -m venv --prompt triton-ext .venv
+  source .venv/bin/activate
+  pip install -r requirements.txt
+  pip install /path/to/triton-3.8.0+git<hash>-cp314-cp314-linux_x86_64.whl
   ```
 
-- the upstream Triton installation must also contain the Triton Python package
-  (for testing):
+- An **LLVM/MLIR build for headers, `mlir-tblgen`, and CMake modules**, pointed
+  to by `LLVM_INSTALL_DIR`. It is *not* used for linking (libtriton provides the
+  symbols), but it **must match the LLVM the wheel was built against** --
+  including the `LLVM_ENABLE_ABI_BREAKING_CHECKS` setting, or the plugin will
+  crash at load. The reliable source is the LLVM that Triton itself downloaded
+  and cached while building the wheel:
 
-  ```cmake
-  install(DIRECTORY ${PROJECT_SOURCE_DIR}/python/
-    COMPONENT python
-    DESTINATION python
-    FILES_MATCHING PATTERN "*.so" EXCLUDE
-                   PATTERN "*.pyc" EXCLUDE
-                   PATTERN "__pycache__" EXCLUDE
-  )
-  install(CODE "execute_process(COMMAND \"${CMAKE_COMMAND}\" -E create_symlink
-          \"../../../lib64/libtriton.so\"
-          \"\${CMAKE_INSTALL_PREFIX}/python/triton/_C/libtriton.so\"
-          COMMAND_ERROR_IS_FATAL ANY)"
-      COMPONENT python
-  )
+  ```console
+  export LLVM_INSTALL_DIR=~/.triton/llvm/llvm-<hash>-<os>-<arch>
   ```
 
-With the right Triton artifacts built, we install the Python package for this
-extension. We make sure to use the same version of Python as the one used to
-build Triton (e.g., v3.14.2 here):
+### Build and test
+
+Build the extension package separately with pip (each extension builds on its
+own); `--no-build-isolation` lets the build see the installed Triton wheel:
 
 ```console
-python -m venv --prompt triton-ext .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cd pass/ArithmeticIntensity/
-pip install -e . --no-build-isolation -v
+LLVM_INSTALL_DIR=~/.triton/llvm/llvm-<hash>-<os>-<arch> \
+    pip install -e pass/ArithmeticIntensity --no-build-isolation -v
 ```
 
-Now we should be able run the arithmetic intensity tests:
+Then run the tests with a plain environment -- no plugin/library path variables
+are needed:
 
 ```console
-$ BUILD_DIR="build" \
-  LLVM_INSTALL_DIR="llvm-62b7cf96-linux-x64" \
-  TRITON_INSTALL_DIR="../triton/build/install" \
-    python -m pytest -sv pass/ArithmeticIntensity/test
+python -m pytest -v pass/ArithmeticIntensity/test
+```
+
+To produce a redistributable wheel instead:
+
+```console
+LLVM_INSTALL_DIR=~/.triton/llvm/llvm-<hash>-<os>-<arch> \
+    pip wheel pass/ArithmeticIntensity --no-build-isolation --no-deps -w dist/
 ```
 
 [#10775]: https://github.com/triton-lang/triton/pull/10775

@@ -2,11 +2,11 @@
 """
 Run the arithmetic-intensity pass on an MLIR file and print the result.
 
-Usage:
-    TRITON_PLUGIN_PATHS=.../libarithmetic_intensity.so \\
-    PYTHONPATH=.../triton-*/python \\
-    LD_LIBRARY_PATH=.../llvm-*/lib \\
-        python run_pass.py <mlir_file>
+The plugin ships as the installed ``triton_arithmetic_intensity`` package and
+loads itself on import, so no ``TRITON_PLUGIN_PATHS``/``LD_LIBRARY_PATH``/
+``PYTHONPATH`` wiring is required:
+
+    python run_pass.py <mlir_file>
 """
 
 import sys
