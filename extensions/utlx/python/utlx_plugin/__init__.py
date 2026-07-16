@@ -186,8 +186,10 @@ from .utility import (
 # Register this module as triton.language.extra.tlx so that
 # `import triton.language.extra.tlx` works without a filesystem symlink.
 # This must happen before importing mxfp8_utils which does that import.
+from pathlib import Path
 import sys as _sys
 import triton.language.extra as _extra
+import triton._C.libtriton as _libtriton
 
 _sys.modules['triton.language.extra.tlx'] = _sys.modules[__name__]
 _extra.tlx = _sys.modules[__name__]
@@ -213,3 +215,10 @@ def _register_compiler_dispatch():
 
 
 _register_compiler_dispatch()
+
+# Register the uTLX plugin library with Triton.
+PLUGIN_DIR = Path(__file__).resolve().parent
+PLUGIN_LIBRARY = PLUGIN_DIR / "libutlx.so"
+_libtriton.passes.plugin.extend_with(str(PLUGIN_LIBRARY))  # adds passes
+_libtriton.builder.extend_dialects_with(str(PLUGIN_LIBRARY))  # adds dialects
+_libtriton.builder.ir.extend_with(str(PLUGIN_LIBRARY))  # adds ops
