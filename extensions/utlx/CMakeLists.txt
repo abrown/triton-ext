@@ -183,12 +183,7 @@ add_library(${TRITON_EXT_NAME} SHARED
 add_dependencies(${TRITON_EXT_NAME} uTLXTableGen)
 
 target_compile_definitions(${TRITON_EXT_NAME} PRIVATE
-    TRITON_EXT_VERSION="${TRITON_EXT_VERSION}"
-    # The plugin is loaded into a libtriton whose LLVM may have been built with a
-    # different LLVM_ENABLE_ABI_BREAKING_CHECKS setting. Disable the link-time
-    # enforcement symbol (llvm::{Enable,Disable}ABIBreakingChecks) so the plugin
-    # resolves cleanly against the host's libtriton.
-    LLVM_DISABLE_ABI_BREAKING_CHECKS_ENFORCING=1)
+    TRITON_EXT_VERSION="${TRITON_EXT_VERSION}")
 
 target_compile_options(${TRITON_EXT_NAME} PRIVATE
     -fvisibility=hidden
@@ -207,31 +202,11 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
-# Force LLVM_ENABLE_ABI_BREAKING_CHECKS=1 to match the host libtriton (built as
-# an asserts build). That flag toggles ilist sentinel tracking, which changes the
-# mangled type of every ilist_iterator (pervasive in MLIR); a mismatch produces
-# runtime "undefined symbol" load failures. The LLVM install's abi-breaking.h
-# hardcodes the value with an unconditional `#define`, so a plain -D would be
-# clobbered. Instead, generate a patched copy of the header and shadow it on the
-# include path (searched BEFORE the LLVM install).
+# Require LLVM_ENABLE_ABI_BREAKING_CHECKS=1 to match the host libtriton (built as
+# an asserts build); see cmake/llvm-abi-breaking.cmake for the rationale.
 # ---------------------------------------------------------------------------
-set(_abi_src "${LLVM_INSTALL_DIR}/include/llvm/Config/abi-breaking.h")
-set(_abi_override_dir "${CMAKE_CURRENT_BINARY_DIR}/abi-override")
-if(EXISTS "${_abi_src}")
-    file(READ "${_abi_src}" _abi_contents)
-    string(REPLACE
-        "#define LLVM_ENABLE_ABI_BREAKING_CHECKS 0"
-        "#define LLVM_ENABLE_ABI_BREAKING_CHECKS 1"
-        _abi_contents "${_abi_contents}")
-    file(WRITE "${_abi_override_dir}/llvm/Config/abi-breaking.h" "${_abi_contents}")
-    target_include_directories(${TRITON_EXT_NAME} SYSTEM BEFORE PRIVATE
-        "${_abi_override_dir}")
-    message(STATUS "uTLX: forcing LLVM_ENABLE_ABI_BREAKING_CHECKS=1 "
-                   "(shadow header at ${_abi_override_dir})")
-else()
-    message(WARNING "uTLX: could not find ${_abi_src}; cannot force "
-                    "LLVM_ENABLE_ABI_BREAKING_CHECKS. Plugin may fail to load.")
-endif()
+include("${TRITON_EXT_REPO_ROOT}/cmake/llvm-abi-breaking.cmake")
+require_llvm_abi_breaking_checks("${LLVM_INSTALL_DIR}")
 
 # Link ONLY against libtriton, which re-exports the MLIR/LLVM symbols. Use
 # --no-as-needed so the DT_NEEDED entry is retained even though the plugin
