@@ -605,9 +605,19 @@ void utlx::createAsyncLoad(TritonOpBuilder &self,
     // Add mask and other if present (operands between result and useBulk flag)
     for (size_t i = 3; i < operands.size() - 1; ++i)
       opOperands.push_back(operands[i]);
+    // ttg.async_copy_global_to_local has AttrSizedOperandSegments: the segment
+    // sizes for (src, result, mask, other) must be provided explicitly, else
+    // the verifier sees all-zero segments and rejects the op.
+    auto &b = self.getBuilder();
+    int32_t nExtra = static_cast<int32_t>(opOperands.size()) - 2;
+    int32_t hasMask = nExtra >= 1 ? 1 : 0;
+    int32_t hasOther = nExtra >= 2 ? 1 : 0;
+    mlir::NamedAttribute segAttr(
+        b.getStringAttr("operandSegmentSizes"),
+        b.getDenseI32ArrayAttr({1, 1, hasMask, hasOther}));
     auto *op = createRuntimeOp(
-        self.getBuilder(), self.getLastLoc(), "ttg.async_copy_global_to_local",
-        {self.getBuilder().getType<ttg::AsyncTokenType>()}, opOperands);
+        b, self.getLastLoc(), "ttg.async_copy_global_to_local",
+        {b.getType<ttg::AsyncTokenType>()}, opOperands, {segAttr});
     if (op && op->getNumResults() > 0)
       operands[0] = op->getResult(0);
   }
