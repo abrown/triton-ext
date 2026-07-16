@@ -1,3 +1,7 @@
+"""
+Common utility functions for CI scripts.
+"""
+
 import logging
 import os
 import shutil
