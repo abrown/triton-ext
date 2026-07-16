@@ -220,5 +220,5 @@ _register_compiler_dispatch()
 PLUGIN_DIR = Path(__file__).resolve().parent
 PLUGIN_LIBRARY = PLUGIN_DIR / "libutlx.so"
 _libtriton.passes.plugin.extend_with(str(PLUGIN_LIBRARY))  # adds passes
-_libtriton.builder.extend_dialects_with(str(PLUGIN_LIBRARY))  # adds dialects
-_libtriton.builder.ir.extend_with(str(PLUGIN_LIBRARY))  # adds ops
+_libtriton.ir.extend_dialects_with(str(PLUGIN_LIBRARY))  # adds dialects
+_libtriton.ir.builder.extend_with(str(PLUGIN_LIBRARY))  # adds ops
