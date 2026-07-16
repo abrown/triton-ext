@@ -154,9 +154,17 @@ def async_dot(
             A_handle = require_dot_operand_layout(A, 0, acc_with_layout,
                                                   _semantic.builder)
         # Use gluon: create_warpgroup_mma(a, b, acc, useAcc, precision, maxNumImpreciseAcc, isAsync)
+        # useAcc must be an int1 IR value (not None). Default to True so the
+        # accumulator is read (acc = a*b + acc), matching a matmul K-loop.
+        if use_acc is None:
+            use_acc_handle = _semantic.builder.get_int1(True)
+        elif isinstance(use_acc, tl.tensor):
+            use_acc_handle = use_acc.handle
+        else:
+            use_acc_handle = _semantic.builder.get_int1(bool(use_acc.value))
         output = _semantic.builder.create_warpgroup_mma(
-            A_handle, B_handle, acc_with_layout, None, input_precision,
-            max_num_imprecise_acc, True)
+            A_handle, B_handle, acc_with_layout, use_acc_handle,
+            input_precision, max_num_imprecise_acc, True)
         output = _semantic.builder.create_utlx_release_layout([output])
         return tl.tensor(output, ret_ty)
 
