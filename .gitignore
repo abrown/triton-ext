@@ -1,4 +1,5 @@
 build
+dist
 llvm-*
 triton-*
 !triton-ext.toml
