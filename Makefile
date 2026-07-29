@@ -1,8 +1,9 @@
 # Shortcuts for building the project; the true build system is CMake, but this records common commands.
 
-TRITON_INSTALL_DIR ?= $(shell ci/pick-local-artifact.py triton)
-LLVM_INSTALL_DIR ?= $(shell ci/pick-local-artifact.py llvm)
-$(if $(and $(TRITON_INSTALL_DIR),$(LLVM_INSTALL_DIR)),,$(error Missing artifact directories))
+TRITON_INSTALL_DIR ?= $(shell ci/probe_triton_wheel.py)
+$(if $(TRITON_INSTALL_DIR),,$(error Could not find Triton wheel; try `ci/download_triton_wheel.py && pip install triton-*.wheel`))
+LLVM_INSTALL_DIR ?= $(shell ci/pick_local_artifact.py 'llvm-*[!tar.gz]')
+$(if $(LLVM_INSTALL_DIR),,$(error Could not find LLVM artifact; try `ci/download_llvm.py`))
 BUILD_DIR ?= build
 EXTRA_CMAKE_ARGS ?=
 
